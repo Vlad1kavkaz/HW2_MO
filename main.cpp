@@ -7,13 +7,13 @@
 #include <fstream>
 
 const int POPULATION_SIZE = 4;
-const int NUM_GENERATIONS = 3000;
-const double MUTATION_RATE = 0.1;
+const int NUM_GENERATIONS = 80000;
+double MUTATION_RATE = 0.25;
 const double MIN_X = -2.0;
 const double MAX_X = 2.0;
 const double MIN_Y = -2.0;
 const double MAX_Y = 2.0;
-const int MAX_EXECUTION_TIME_SECONDS = 15;
+const int MAX_EXECUTION_TIME_SECONDS = 600;
 auto start_time = std::chrono::high_resolution_clock::now();
 
 struct Individual {
@@ -28,12 +28,12 @@ struct Individual {
 std::vector<Individual> create_initial_population() {
     std::vector<Individual> population(POPULATION_SIZE);
 
+
     auto currentTime = std::chrono::system_clock::now().time_since_epoch();
     unsigned seed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime).count();
     std::mt19937 generator(seed);
     std::uniform_real_distribution<double> x_distribution(MIN_X, MAX_X);
     std::uniform_real_distribution<double> y_distribution(MIN_Y, MAX_Y);
-
     for (int i = 0; i < POPULATION_SIZE; ++i) {
         double x = x_distribution(generator);
         double y = y_distribution(generator);
@@ -55,13 +55,70 @@ std::vector<Individual> evaluate_population(std::vector<Individual> &population)
     return population;
 }
 
-std::vector<Individual> select_parents(const std::vector<Individual> &population) {
-    std::vector<Individual> parents = population;
-    std::sort(parents.begin(), parents.end(), [](const Individual &a, const Individual &b) {
-        return a.fitness > b.fitness;
-    });
+std::vector<Individual> select_parents(const std::vector<Individual>& population) {
+    std::vector<Individual> parents;
+    const int TOURNAMENT_SIZE = 3;
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    std::uniform_int_distribution<int> distribution(0, population.size() - 1);
+
+    for (int i = 0; i < population.size(); ++i) {
+        Individual bestParent;
+        double bestFitness = -std::numeric_limits<double>::infinity();
+
+        for (int j = 0; j < TOURNAMENT_SIZE; ++j) {
+            int random_index = distribution(generator);
+            const Individual& candidate = population[random_index];
+
+            double distance = std::sqrt(std::pow(candidate.x - 0.653297871, 2) + std::pow(candidate.y + 0.00000000564618584, 2));
+
+            // Меняем вес в зависимости от близости к ожидаемому решению
+            double distance_weight = exp(-0.1 * distance);
+
+            double weighted_fitness = candidate.fitness * distance_weight;
+
+            if (weighted_fitness > bestFitness) {
+                bestParent = candidate;
+                bestFitness = weighted_fitness;
+            }
+        }
+
+        parents.push_back(bestParent);
+    }
+
     return parents;
 }
+
+
+// Обновленная функция мутации
+Individual mutate(const Individual& individual) {
+
+    auto currentTime = std::chrono::system_clock::now().time_since_epoch();
+    unsigned seed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime).count();
+    std::mt19937 gen(seed);
+    std::uniform_real_distribution<double> mutation_prob(0.0, 1.0);
+    std::uniform_real_distribution<double> mutation_value(-MUTATION_RATE, MUTATION_RATE);
+
+    double x = individual.x;
+    double y = individual.y;
+
+    if (mutation_prob(gen) < MUTATION_RATE) {
+        x += mutation_value(gen);
+        x = std::max(MIN_X, std::min(x, MAX_X));
+    }
+
+    if (mutation_prob(gen) < MUTATION_RATE) {
+        y += mutation_value(gen);
+        y = std::max(MIN_Y, std::min(y, MAX_Y));
+    }
+
+    Individual ind(x, y);
+    ind.fitness = fitness_function(x, y);
+
+    return ind;
+}
+
+
 
 Individual crossover(const Individual &parent1, const Individual &parent2) {
     auto currentTime = std::chrono::system_clock::now().time_since_epoch();
@@ -77,29 +134,6 @@ Individual crossover(const Individual &parent1, const Individual &parent2) {
     return ind;
 }
 
-Individual mutate(const Individual &individual) {
-    auto currentTime = std::chrono::system_clock::now().time_since_epoch();
-    unsigned seed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime).count();
-    std::mt19937 gen(seed);
-    std::uniform_real_distribution<double> mutation_prob(0.0, 1.0);
-    std::uniform_real_distribution<double> mutation_value(-2.0, 2.0);
-
-    double x = individual.x;
-    double y = individual.y;
-
-    if (mutation_prob(gen) < MUTATION_RATE) {
-        x = mutation_value(gen);
-    }
-
-    if (mutation_prob(gen) < MUTATION_RATE) {
-        y = mutation_value(gen);
-    }
-
-    Individual ind(x, y);
-    ind.fitness = fitness_function(x, y);
-
-    return ind;
-}
 
 bool checkConvergence(std::vector<Individual>& population) {
     double sum = 0;
@@ -109,7 +143,7 @@ bool checkConvergence(std::vector<Individual>& population) {
     double average = sum / population.size();
 
     int numConverged = 0;
-    double tolerance = 0.01; // Порог для сходимости
+    double tolerance = 0.0001; // Порог для сходимости
 
     for (auto& p : population) {
         if (std::abs(p.fitness - average) < tolerance) {
@@ -125,7 +159,7 @@ bool checkConvergence(std::vector<Individual>& population) {
 void printToTxt(std::vector<Individual> population, int i) {
     std::ofstream out(R"(C:\Users\28218\CLionProjects\HW2-MO\output.txt)", std::ios::app);
     double sum = 0;
-    std::vector<int> iterationsToPrint = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+    std::vector<int> iterationsToPrint = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 50, 100, 200, 500, 1000, 5000, 10000, 20000, 50000, 79999};
     if (std::find(iterationsToPrint.begin(), iterationsToPrint.end(), i) != iterationsToPrint.end()) {
         out << i << std::endl;
         out << "X:" << std::endl;
@@ -157,12 +191,13 @@ void printToTxt(std::vector<Individual> population, int i) {
 
 int main() {
     std::vector<Individual> population = create_initial_population();
-
+    double initial_mutation_rate = MUTATION_RATE;
     for (int generation = 0; generation < NUM_GENERATIONS; generation++) {
         population = evaluate_population(population);
         std::vector<Individual> parents = select_parents(population);
         printToTxt(population, generation);
-
+        double current_convergence = static_cast<double>(generation) / NUM_GENERATIONS;
+        MUTATION_RATE = initial_mutation_rate * (1.0 - current_convergence);
         for (size_t j = 0; j < POPULATION_SIZE - 1; j += 2) {
             Individual child1 = crossover(parents[j], parents[j + 1]);
             child1 = mutate(child1);
